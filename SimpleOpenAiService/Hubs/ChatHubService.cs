@@ -10,20 +10,19 @@ public class ChatHubService
 {
     private readonly HubConnection _hubConnection;
     private readonly ILogger _logger;
-    private readonly OllamaClient _ollamaClient;
 
     public ChatHubService(
         ILogger<ChatHubService> logger,
         OllamaClient ollamaClient)
     {
         _logger = logger;
-        _ollamaClient = ollamaClient;
         _hubConnection = new HubConnectionBuilder()
             .WithUrl("http://localhost:5217/chatHub")
             .Build();
 
         _hubConnection.On<string, string>("ReceiveUserMessage", (user, message) =>
         {
+            // todo: delete
             _logger.LogWarning($"_hubConnection.On<string, string>(ReceiveUserMessage,... {user}: {message}");
         });
 
@@ -59,24 +58,4 @@ public class ChatHubService
                 _logger.LogWarning($"*** EnsureConnectionAsync: {_hubConnection.State}");
         }
     }
-
-    public async Task SendMessageAsync(string user, string message)
-    {
-        try
-        {
-            // Call a method on the SignalR hub to send a message
-            await _hubConnection.SendAsync("SendBotMessage", user, message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error sending message to SignalR hub: {ex.Message}");
-        }
-    }
-
-    public async Task StreamBot(string prompt, CancellationToken cancellationToken)
-    {
-        await _ollamaClient.StreamCompletion(prompt, cancellationToken);
-    }
-
-    // Add more methods as needed to interact with the SignalR hub
 }

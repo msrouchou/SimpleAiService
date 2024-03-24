@@ -26,14 +26,14 @@ public class AiChatHub(
         OnUserMessageReceived(new UserMessageReceivedEventArgs(user, prompt));
     }
 
-    protected virtual void OnUserMessageReceived(UserMessageReceivedEventArgs e)
-    {
-        UserMessageReceived?.Invoke(this, e);
-    }
-
     public async Task SendBotMessage(string user, string response)
     {
         await Clients.All.SendAsync("ReceiveBotMessage", user, response);
+    }
+
+    protected virtual void OnUserMessageReceived(UserMessageReceivedEventArgs e)
+    {
+        UserMessageReceived?.Invoke(this, e);
     }
 
     public class UserMessageReceivedEventArgs(string user, string prompt)
