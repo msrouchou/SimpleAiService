@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>dotnet-SimpleOpenAiService-d32708da-ac03-41ee-9ad5-28e77bc0b19f</UserSecretsId>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Meziantou.Framework" Version="3.0.39" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.3" />
+		<PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.3" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+		<PackageReference Include="OllamaSharp" Version="1.1.0" />
+	</ItemGroup>
+
+</Project>
