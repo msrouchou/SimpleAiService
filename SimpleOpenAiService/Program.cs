@@ -6,29 +6,29 @@ using SimpleOpenAiService.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Worker
+builder.Services.AddHostedService<Worker>();
+
+// Serilog
 builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
 
-var configuration = builder.Configuration;
+// Ollama
+builder.Services.Configure<OllamaConfiguration>(builder.Configuration.GetSection("ollama"));
+builder.Services.AddSingleton<OllamaClient>();
 
-var ollamaConfig = configuration.GetSection("ollama");
-
-builder.Services.Configure<OllamaConfiguration>(ollamaConfig);
-
+// SignalR
 builder.Services.AddSignalR(options =>
 {
     options.ClientTimeoutInterval = TimeSpan.FromMinutes(15);
 });
 
-builder.Services.AddLogging();
-
-builder.Services.AddHostedService<Worker>();
-builder.Services.AddSingleton<OllamaClient>();
 builder.Services.AddSingleton<ChatHubService>();
 builder.Services.AddSingleton<AiChatHub>();
 
 var app = builder.Build();
 
+// SignalR
 app.MapHub<AiChatHub>("/chatHub");
 
 app.Run();

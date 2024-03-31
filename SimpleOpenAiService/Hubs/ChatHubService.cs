@@ -1,8 +1,5 @@
 ﻿using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.Extensions.Logging;
 using SimpleOpenAiService.Clients;
-using System;
-using System.Threading.Tasks;
 
 namespace SimpleOpenAiService.Hubs;
 
@@ -56,12 +53,16 @@ public class ChatHubService
         {
             if (_hubConnection.State == HubConnectionState.Connected)
             {
-                _ollamaClient.CancellationSource = new();
+                if (_ollamaClient.CancellationSource.IsCancellationRequested)
+                {
+                    _ollamaClient.CancellationSource = new();
+                }
+
                 _logger.LogInformation($"{nameof(EnsureSignalRConnectionAsync)}: {{State}}", _hubConnection.State);
             }
             else
             {
-                _ollamaClient.CancellationSource.CancelAfter(3000);
+                _ollamaClient.CancellationSource.Cancel();
                 _logger.LogWarning($"{nameof(EnsureSignalRConnectionAsync)}: {{State}}", _hubConnection.State);
             }
         }
