@@ -1,9 +1,13 @@
+using Serilog;
 using SimpleOpenAiService;
 using SimpleOpenAiService.Clients;
 using SimpleOpenAiService.Configuration;
 using SimpleOpenAiService.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, configuration) =>
+    configuration.ReadFrom.Configuration(context.Configuration));
 
 var configuration = builder.Configuration;
 

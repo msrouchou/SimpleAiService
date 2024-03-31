@@ -26,11 +26,13 @@ public sealed class OllamaClient
         _aiChatHub.UserMessageReceived += OnUserMessageReceived;
     }
 
+    public CancellationTokenSource CancellationSource = new();
+
     private async void OnUserMessageReceived(object? sender, UserMessageReceivedEventArgs e)
     {
         try
         {
-            await StreamCompletion(e.Prompt, CancellationToken.None);
+            _ = await StreamCompletion(e.Prompt, CancellationSource.Token);
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -45,7 +47,7 @@ public sealed class OllamaClient
 
     public async Task EnsureModelExists(bool mustPullModel, CancellationToken cancellationToken)
     {
-        var localModels = await _ollamaApi.ListLocalModels(cancellationToken);
+        IEnumerable<Model> localModels = await EnsureOllamaIsRunning(cancellationToken);
 
         string modelName = _ollamaConfig.Value.Model;
 
@@ -54,7 +56,7 @@ public sealed class OllamaClient
             return m.Name.StartsWith(modelName);
         }))
         {
-            _logger.LogDebug($"Local Ollama model '{modelName}' is ready");
+            _logger.LogInformation("Local Ollama model ready: {ModelName} ", modelName);
             return;
         }
 
@@ -88,6 +90,27 @@ public sealed class OllamaClient
                 return;
             }
         }
+
+        async Task<IEnumerable<Model>> EnsureOllamaIsRunning(CancellationToken cancellationToken)
+        {
+            IEnumerable<Model> localModels = [];
+            bool isOllamaRunning = false;
+            do
+            {
+                try
+                {
+                    localModels = await _ollamaApi.ListLocalModels(cancellationToken);
+                    isOllamaRunning = true;
+                }
+                catch (HttpRequestException e)
+                {
+                    _logger.LogError($"Ollama is not running: {e.Message}");
+                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+                }
+            } while (!isOllamaRunning);
+
+            return localModels;
+        }
     }
 
     public async Task<IEnumerable<string>> StreamCompletion(string prompt, CancellationToken cancellationToken)
@@ -101,7 +124,9 @@ public sealed class OllamaClient
             async stream =>
             {
                 answer.Add(stream.Response);
+
                 await _aiChatHub.SendBotMessage("bot", stream.Response);
+
                 if (stream.Done)
                 {
                     await _aiChatHub.SendBotMessage("bot", "%%%DONE%%");

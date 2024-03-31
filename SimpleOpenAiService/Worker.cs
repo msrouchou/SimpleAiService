@@ -11,7 +11,7 @@ public sealed class Worker(ChatHubService chatService, OllamaClient ollamaClient
         while (!cancellationToken.IsCancellationRequested)
         {
             await ollamaClient.EnsureModelExists(mustPullModel: true, cancellationToken);
-            await chatService.EnsureConnectionAsync(cancellationToken);
+            await chatService.EnsureSignalRConnectionAsync(cancellationToken);
 
             await Task.Delay(5000, cancellationToken);
         }
