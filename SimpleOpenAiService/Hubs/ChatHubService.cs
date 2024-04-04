@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
 using SimpleOpenAiService.Clients;
+using SimpleOpenAiService.Configuration;
 
 namespace SimpleOpenAiService.Hubs;
 
@@ -11,12 +13,13 @@ public class ChatHubService
 
     public ChatHubService(
         ILogger<ChatHubService> logger,
+        IOptions<ClientHubConfiguration> clientHubConfig,
         OllamaClient ollamaClient)
     {
         _logger = logger;
         _ollamaClient = ollamaClient;
         _hubConnection = new HubConnectionBuilder()
-            .WithUrl("http://localhost:5217/chatHub")
+            .WithUrl(clientHubConfig.Value.Uri)
             .Build();
 
         _hubConnection.On<string, string>("ReceiveUserMessage", (user, message) =>
@@ -29,6 +32,8 @@ public class ChatHubService
         {
             _logger.LogWarning($"_hubConnection.On<string, string>(SendBotMessage,... {user}: {message}");
         });
+
+        // todo: use _hubConnection.EVENTS
     }
 
     public async Task EnsureSignalRConnectionAsync(CancellationToken cancellationToken)
