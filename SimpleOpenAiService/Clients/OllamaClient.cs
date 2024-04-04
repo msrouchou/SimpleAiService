@@ -19,10 +19,11 @@ public sealed class OllamaClient(
     private readonly AiChatHub _aiChatHub = aiChatHub;
     private Queue<string> _unansweredPrompts = new();
 
-    public override async Task StreamCompletion(string prompt, CancellationToken cancellationToken)
+    public override async Task StreamCompletion(string user, string prompt, CancellationToken cancellationToken)
     {
         if (cancellationToken.IsCancellationRequested)
         {
+            // todo: fix to include user in queued prompts
             if (_unansweredPrompts.Count < 3)
             {
                 _unansweredPrompts.Enqueue(prompt);
@@ -34,27 +35,31 @@ public sealed class OllamaClient(
         while (_unansweredPrompts.Count > 0)
         {
             var unanswered = _unansweredPrompts.Dequeue();
-            await StreamCompletion(unanswered, cancellationToken);
+            await StreamCompletion(user, unanswered, cancellationToken);
         }
 
         List<string> answerDebug = [];
 
         ConversationContext? context = null;
-        context = await _ollamaApi.StreamCompletion(
-            prompt,
-            context,
-            async stream =>
-            {
-                answerDebug.Add(stream.Response);
-
-                await _aiChatHub.SendBotMessage("bot", stream.Response);
-
-                if (stream.Done)
+        context = await Task.Run(async () =>
+        {
+            return await _ollamaApi.StreamCompletion(
+                prompt,
+                context,
+                async stream =>
                 {
-                    await _aiChatHub.SendBotMessage("bot", "%%%DONE%%");
-                }
-            },
-            cancellationToken);
+                    answerDebug.Add(stream.Response);
+
+                    await _aiChatHub.SendBotAnswer(user, stream.Response);
+
+                    if (stream.Done)
+                    {
+                        await _aiChatHub.SendBotAnswer(user, "%%%DONE%%");
+                    }
+                },
+                cancellationToken);
+        });
+
 
         _logger.LogInformation(string.Join("", answerDebug));
     }

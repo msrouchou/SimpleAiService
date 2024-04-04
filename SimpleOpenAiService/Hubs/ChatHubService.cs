@@ -45,7 +45,7 @@ public class ChatHubService
             catch (Exception)
             {
                 _logger.LogWarning("Not Connected: {State}", _hubConnection.State);
-                await Task.Delay(TimeSpan.FromSeconds(5));
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
         }
 
@@ -58,12 +58,12 @@ public class ChatHubService
                     _ollamaClient.CancellationSource = new();
                 }
 
-                _logger.LogInformation($"{nameof(EnsureSignalRConnectionAsync)}: {{State}}", _hubConnection.State);
+                _logger.LogInformation($"UI application: {{State}}", _hubConnection.State);
             }
             else
             {
                 _ollamaClient.CancellationSource.Cancel();
-                _logger.LogWarning($"{nameof(EnsureSignalRConnectionAsync)}: {{State}}", _hubConnection.State);
+                _logger.LogWarning($"UI application: {{State}}", _hubConnection.State);
             }
         }
     }
