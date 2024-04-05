@@ -1,13 +1,14 @@
 ﻿using Microsoft.AspNetCore.SignalR;
-using SimpleOpenAiService.Clients;
 
 namespace SimpleOpenAiService.Hubs;
 
-public class AiChatHub(
+public sealed class AiChatHub(
     ILogger<AiChatHub> logger)
     : Hub
 {
-    public event EventHandler<UserMessageReceivedEventArgs>? UserMessageReceived;
+    private readonly Dictionary<string, string> _userConnections = [];
+
+    internal event EventHandler<UserMessageReceivedEventArgs>? UserMessageReceived;
 
     /// <summary>
     /// Recipe:
@@ -17,27 +18,37 @@ public class AiChatHub(
     /// </summary>
     /// <param name="user">The user name</param>
     /// <param name="prompt">The user prompt</param>
-    public async Task ReceiveUserPrompt(string user, string prompt)
+    public void ReceiveUserPrompt(string user, string prompt)
     {
-        logger.LogInformation($"Received prompt from {user}: {prompt}");
+        logger.LogInformation($"Received prompt from {{User}}: {prompt}", user);
 
-        //var answer = await ollamaClient.StreamCompletion(prompt, CancellationToken.None);
-        await Task.Yield();
-        OnUserMessageReceived(new UserMessageReceivedEventArgs(user, prompt));
+        var connectionId = Context.ConnectionId;
+
+        if (_userConnections.ContainsKey(user))
+        {
+            _userConnections[user] = connectionId;
+        }
+        else
+        {
+            _userConnections.Add(user, connectionId);
+        }
+
+        UserMessageReceived?.Invoke(this, new UserMessageReceivedEventArgs(user, prompt));
     }
 
-    public async Task SendBotMessage(string user, string response)
+    internal async Task SendBotAnswer(string user, string answer, bool isDone = false)
     {
-        await Clients.All.SendAsync("ReceiveBotMessage", user, response);
+        if (_userConnections.TryGetValue(user, out var userConnectionId))
+        {
+            await Clients.Client(userConnectionId).SendAsync("ReceiveBotMessage", user, answer, isDone);
+        }
+        else
+        {
+            logger.LogError("Connection not found for user: {User}", user);
+        }
     }
 
-    protected virtual void OnUserMessageReceived(UserMessageReceivedEventArgs e)
-    {
-        UserMessageReceived?.Invoke(this, e);
-    }
-
-    public class UserMessageReceivedEventArgs(string user, string prompt)
-        : EventArgs
+    internal class UserMessageReceivedEventArgs(string user, string prompt) : EventArgs
     {
         public string User { get; } = user;
         public string Prompt { get; } = prompt;

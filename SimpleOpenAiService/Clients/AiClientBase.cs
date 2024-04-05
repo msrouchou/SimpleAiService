@@ -15,7 +15,7 @@ public abstract class AiClientBase
 
     public CancellationTokenSource CancellationSource = new();
 
-    public abstract Task StreamCompletion(string prompt, CancellationToken cancellationToken);
+    public abstract Task StreamCompletion(string user, string prompt, CancellationToken cancellationToken);
 
     public abstract Task EnsureModelExists(bool mustPullModel, CancellationToken cancellationToken);
 
@@ -25,7 +25,7 @@ public abstract class AiClientBase
     {
         try
         {
-            await StreamCompletion(e.Prompt, CancellationSource.Token);
+            await StreamCompletion(e.User, e.Prompt, CancellationSource.Token);
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {

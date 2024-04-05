@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
 using SimpleOpenAiService.Clients;
+using SimpleOpenAiService.Configuration;
 
 namespace SimpleOpenAiService.Hubs;
 
@@ -11,12 +13,13 @@ public class ChatHubService
 
     public ChatHubService(
         ILogger<ChatHubService> logger,
+        IOptions<ClientHubConfiguration> clientHubConfig,
         OllamaClient ollamaClient)
     {
         _logger = logger;
         _ollamaClient = ollamaClient;
         _hubConnection = new HubConnectionBuilder()
-            .WithUrl("http://localhost:5217/chatHub")
+            .WithUrl(clientHubConfig.Value.Uri)
             .Build();
 
         _hubConnection.On<string, string>("ReceiveUserMessage", (user, message) =>
@@ -29,6 +32,8 @@ public class ChatHubService
         {
             _logger.LogWarning($"_hubConnection.On<string, string>(SendBotMessage,... {user}: {message}");
         });
+
+        // todo: use _hubConnection.EVENTS
     }
 
     public async Task EnsureSignalRConnectionAsync(CancellationToken cancellationToken)
@@ -40,12 +45,12 @@ public class ChatHubService
             try
             {
                 await _hubConnection.StartAsync();
-                _logger.LogInformation("(｡◕‿‿◕｡) Connected to {ConnectionId}!", _hubConnection.ConnectionId);
+                _logger.LogInformation("⚡💻 Connected to {ConnectionId}!", _hubConnection.ConnectionId);
             }
             catch (Exception)
             {
                 _logger.LogWarning("Not Connected: {State}", _hubConnection.State);
-                await Task.Delay(TimeSpan.FromSeconds(5));
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
         }
 
@@ -58,12 +63,12 @@ public class ChatHubService
                     _ollamaClient.CancellationSource = new();
                 }
 
-                _logger.LogInformation($"{nameof(EnsureSignalRConnectionAsync)}: {{State}}", _hubConnection.State);
+                _logger.LogInformation($"UI application: {{State}}", _hubConnection.State);
             }
             else
             {
                 _ollamaClient.CancellationSource.Cancel();
-                _logger.LogWarning($"{nameof(EnsureSignalRConnectionAsync)}: {{State}}", _hubConnection.State);
+                _logger.LogWarning($"UI application: {{State}}", _hubConnection.State);
             }
         }
     }

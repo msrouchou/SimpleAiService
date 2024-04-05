@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using Meziantou.Framework;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
@@ -17,46 +18,75 @@ public sealed class OllamaClient(
     private readonly OllamaApiClient _ollamaApi = new(ollamaConfig.Value.Uri, ollamaConfig.Value.Model);
     private readonly ILogger<OllamaClient> _logger = logger;
     private readonly AiChatHub _aiChatHub = aiChatHub;
-    private Queue<string> _unansweredPrompts = new();
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<string>> _unansweredPromptsByUser = new();
 
-    public override async Task StreamCompletion(string prompt, CancellationToken cancellationToken)
+    public override async Task StreamCompletion(string user, string prompt, CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            if (_unansweredPrompts.Count < 3)
-            {
-                _unansweredPrompts.Enqueue(prompt);
-            }
+        //if (cancellationToken.IsCancellationRequested)
+        //{
+        //    EnqueueUserPrompt(user, prompt);
+        //    return;
+        //}
 
-            return;
-        }
-
-        while (_unansweredPrompts.Count > 0)
-        {
-            var unanswered = _unansweredPrompts.Dequeue();
-            await StreamCompletion(unanswered, cancellationToken);
-        }
+        //await StreamCompletionForQueuedPrompts(cancellationToken);
 
         List<string> answerDebug = [];
 
         ConversationContext? context = null;
-        context = await _ollamaApi.StreamCompletion(
-            prompt,
-            context,
-            async stream =>
-            {
-                answerDebug.Add(stream.Response);
-
-                await _aiChatHub.SendBotMessage("bot", stream.Response);
-
-                if (stream.Done)
+        context = await Task.Run(async () =>
+        {
+            return await _ollamaApi.StreamCompletion(
+                prompt,
+                context,
+                async stream =>
                 {
-                    await _aiChatHub.SendBotMessage("bot", "%%%DONE%%");
-                }
-            },
-            cancellationToken);
+                    await _aiChatHub.SendBotAnswer(user, stream.Response, isDone: stream.Done);
+
+                    _logger.LogDebug($"{{Response}}{(stream.Done ? "<IsDone>" : "")}", stream.Response);
+                    answerDebug.Add(stream.Response);
+                },
+                cancellationToken);
+        });
 
         _logger.LogInformation(string.Join("", answerDebug));
+
+        #region LocalFunctions
+
+        void EnqueueUserPrompt(string user, string prompt)
+        {
+            if (_unansweredPromptsByUser.TryGetValue(user, out var unansweredPrompts))
+            {
+                if (unansweredPrompts.Count < 3)
+                {
+                    _unansweredPromptsByUser[user].Enqueue(prompt);
+                }
+            }
+            else
+            {
+                _unansweredPromptsByUser[user] = new ConcurrentQueue<string>([prompt]);
+            }
+        }
+
+        async Task StreamCompletionForQueuedPrompts(CancellationToken cancellationToken)
+        {
+            var users = _unansweredPromptsByUser.Keys.ToList(); // Convert keys to list for round-robin iteration
+            var currentIndex = 0;
+
+            while (!_unansweredPromptsByUser.IsEmpty && _unansweredPromptsByUser.Values.Count > 0)
+            {
+                var queuedUser = users[currentIndex];
+
+                if (_unansweredPromptsByUser[queuedUser].TryDequeue(out var unanswered))
+                {
+                    await StreamCompletion(queuedUser, unanswered, cancellationToken);
+                }
+
+                currentIndex = (currentIndex + 1) % users.Count; // Move to the next user in a round-robin fashion
+            }
+        }
+
+
+        #endregion
     }
 
     public override async Task EnsureModelExists(bool mustPullModel, CancellationToken cancellationToken)

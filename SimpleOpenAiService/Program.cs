@@ -14,10 +14,11 @@ builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
 
 // Ollama
-builder.Services.Configure<OllamaConfiguration>(builder.Configuration.GetSection("ollama"));
+builder.Services.Configure<OllamaConfiguration>(builder.Configuration.GetSection("Ollama"));
 builder.Services.AddSingleton<OllamaClient>();
 
 // SignalR
+builder.Services.Configure<ClientHubConfiguration>(builder.Configuration.GetSection("ClientHub"));
 builder.Services.AddSignalR(options =>
 {
     options.ClientTimeoutInterval = TimeSpan.FromMinutes(15);
