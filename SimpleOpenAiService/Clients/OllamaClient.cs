@@ -22,13 +22,13 @@ public sealed class OllamaClient(
 
     public override async Task StreamCompletion(string user, string prompt, CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            EnqueueUserPrompt(user, prompt);
-            return;
-        }
+        //if (cancellationToken.IsCancellationRequested)
+        //{
+        //    EnqueueUserPrompt(user, prompt);
+        //    return;
+        //}
 
-        await StreamCompletionForQueuedPrompts(cancellationToken);
+        //await StreamCompletionForQueuedPrompts(cancellationToken);
 
         List<string> answerDebug = [];
 
@@ -42,7 +42,7 @@ public sealed class OllamaClient(
                 {
                     await _aiChatHub.SendBotAnswer(user, stream.Response, isDone: stream.Done);
 
-                    _logger.LogDebug($"{{Response}}{(stream.Done ? "<{{IsDone}}>" : "")}", stream.Response, stream.Done);
+                    _logger.LogDebug($"{{Response}}{(stream.Done ? "<IsDone>" : "")}", stream.Response);
                     answerDebug.Add(stream.Response);
                 },
                 cancellationToken);
@@ -69,17 +69,22 @@ public sealed class OllamaClient(
 
         async Task StreamCompletionForQueuedPrompts(CancellationToken cancellationToken)
         {
-            while (!_unansweredPromptsByUser.IsEmpty)
+            var users = _unansweredPromptsByUser.Keys.ToList(); // Convert keys to list for round-robin iteration
+            var currentIndex = 0;
+
+            while (!_unansweredPromptsByUser.IsEmpty && _unansweredPromptsByUser.Values.Count > 0)
             {
-                foreach (var queuedUser in _unansweredPromptsByUser.Keys)
+                var queuedUser = users[currentIndex];
+
+                if (_unansweredPromptsByUser[queuedUser].TryDequeue(out var unanswered))
                 {
-                    if (_unansweredPromptsByUser[queuedUser].TryDequeue(out var unanswered))
-                    {
-                        await StreamCompletion(queuedUser, unanswered, cancellationToken);
-                    }
+                    await StreamCompletion(queuedUser, unanswered, cancellationToken);
                 }
+
+                currentIndex = (currentIndex + 1) % users.Count; // Move to the next user in a round-robin fashion
             }
         }
+
 
         #endregion
     }
