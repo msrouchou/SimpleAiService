@@ -45,7 +45,7 @@ public class ChatHubService
             try
             {
                 await _hubConnection.StartAsync();
-                _logger.LogInformation("(｡◕‿‿◕｡) Connected to {ConnectionId}!", _hubConnection.ConnectionId);
+                _logger.LogInformation("⚡💻 Connected to {ConnectionId}!", _hubConnection.ConnectionId);
             }
             catch (Exception)
             {

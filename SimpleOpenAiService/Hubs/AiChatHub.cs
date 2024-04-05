@@ -6,7 +6,7 @@ public sealed class AiChatHub(
     ILogger<AiChatHub> logger)
     : Hub
 {
-    private readonly IDictionary<string, string> _userConnections = new Dictionary<string, string>();
+    private readonly Dictionary<string, string> _userConnections = [];
 
     internal event EventHandler<UserMessageReceivedEventArgs>? UserMessageReceived;
 
@@ -36,11 +36,11 @@ public sealed class AiChatHub(
         UserMessageReceived?.Invoke(this, new UserMessageReceivedEventArgs(user, prompt));
     }
 
-    internal async Task SendBotAnswer(string user, string answer)
+    internal async Task SendBotAnswer(string user, string answer, bool isDone = false)
     {
         if (_userConnections.TryGetValue(user, out var userConnectionId))
         {
-            await Clients.Client(userConnectionId).SendAsync("ReceiveBotMessage", user, answer);
+            await Clients.Client(userConnectionId).SendAsync("ReceiveBotMessage", user, answer, isDone);
         }
         else
         {

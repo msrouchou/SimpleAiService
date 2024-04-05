@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using Meziantou.Framework;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
@@ -17,26 +18,17 @@ public sealed class OllamaClient(
     private readonly OllamaApiClient _ollamaApi = new(ollamaConfig.Value.Uri, ollamaConfig.Value.Model);
     private readonly ILogger<OllamaClient> _logger = logger;
     private readonly AiChatHub _aiChatHub = aiChatHub;
-    private Queue<string> _unansweredPrompts = new();
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<string>> _unansweredPromptsByUser = new();
 
     public override async Task StreamCompletion(string user, string prompt, CancellationToken cancellationToken)
     {
         if (cancellationToken.IsCancellationRequested)
         {
-            // todo: fix to include user in queued prompts
-            if (_unansweredPrompts.Count < 3)
-            {
-                _unansweredPrompts.Enqueue(prompt);
-            }
-
+            EnqueueUserPrompt(user, prompt);
             return;
         }
 
-        while (_unansweredPrompts.Count > 0)
-        {
-            var unanswered = _unansweredPrompts.Dequeue();
-            await StreamCompletion(user, unanswered, cancellationToken);
-        }
+        await StreamCompletionForQueuedPrompts(cancellationToken);
 
         List<string> answerDebug = [];
 
@@ -48,20 +40,48 @@ public sealed class OllamaClient(
                 context,
                 async stream =>
                 {
+                    await _aiChatHub.SendBotAnswer(user, stream.Response, isDone: stream.Done);
+
+                    _logger.LogDebug($"{{Response}}{(stream.Done ? "<{{IsDone}}>" : "")}", stream.Response, stream.Done);
                     answerDebug.Add(stream.Response);
-
-                    await _aiChatHub.SendBotAnswer(user, stream.Response);
-
-                    if (stream.Done)
-                    {
-                        await _aiChatHub.SendBotAnswer(user, "%%%DONE%%");
-                    }
                 },
                 cancellationToken);
         });
 
-
         _logger.LogInformation(string.Join("", answerDebug));
+
+        #region LocalFunctions
+
+        void EnqueueUserPrompt(string user, string prompt)
+        {
+            if (_unansweredPromptsByUser.TryGetValue(user, out var unansweredPrompts))
+            {
+                if (unansweredPrompts.Count < 3)
+                {
+                    _unansweredPromptsByUser[user].Enqueue(prompt);
+                }
+            }
+            else
+            {
+                _unansweredPromptsByUser[user] = new ConcurrentQueue<string>([prompt]);
+            }
+        }
+
+        async Task StreamCompletionForQueuedPrompts(CancellationToken cancellationToken)
+        {
+            while (!_unansweredPromptsByUser.IsEmpty)
+            {
+                foreach (var queuedUser in _unansweredPromptsByUser.Keys)
+                {
+                    if (_unansweredPromptsByUser[queuedUser].TryDequeue(out var unanswered))
+                    {
+                        await StreamCompletion(queuedUser, unanswered, cancellationToken);
+                    }
+                }
+            }
+        }
+
+        #endregion
     }
 
     public override async Task EnsureModelExists(bool mustPullModel, CancellationToken cancellationToken)
