@@ -13,9 +13,11 @@ public abstract class AiClientBase
         OnInitialized();
     }
 
-    public CancellationTokenSource CancellationSource = new();
+    public CancellationTokenSource ChatCancellationSource = new();
 
     public abstract Task StreamCompletion(string user, string prompt, CancellationToken cancellationToken);
+
+    public abstract Task StreamChat(string user, string prompt, CancellationToken cancellationToken);
 
     public abstract Task EnsureModelExists(bool mustPullModel, CancellationToken cancellationToken);
 
@@ -25,7 +27,7 @@ public abstract class AiClientBase
     {
         try
         {
-            await StreamCompletion(e.User, e.Prompt, CancellationSource.Token);
+            await StreamChat(e.User, e.Prompt, ChatCancellationSource.Token);
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {

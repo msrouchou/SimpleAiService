@@ -58,16 +58,17 @@ public class ChatHubService
         {
             if (_hubConnection.State == HubConnectionState.Connected)
             {
-                if (_ollamaClient.CancellationSource.IsCancellationRequested)
+                if (_ollamaClient.ChatCancellationSource.IsCancellationRequested)
                 {
-                    _ollamaClient.CancellationSource = new();
+                    _ollamaClient.ChatCancellationSource = new();
                 }
 
                 _logger.LogInformation($"UI application: {{State}}", _hubConnection.State);
             }
             else
             {
-                _ollamaClient.CancellationSource.Cancel();
+                _ollamaClient.ChatCancellationSource.Cancel();
+
                 _logger.LogWarning($"UI application: {{State}}", _hubConnection.State);
             }
         }

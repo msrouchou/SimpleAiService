@@ -19,14 +19,16 @@ public sealed class OllamaClient(
     private readonly ILogger<OllamaClient> _logger = logger;
     private readonly AiChatHub _aiChatHub = aiChatHub;
     private readonly ConcurrentDictionary<string, ConcurrentQueue<string>> _unansweredPromptsByUser = new();
+    private readonly ConcurrentDictionary<string, Chat> _chatsByUser = new();
 
     public override async Task StreamCompletion(string user, string prompt, CancellationToken cancellationToken)
     {
-        //if (cancellationToken.IsCancellationRequested)
-        //{
-        //    EnqueueUserPrompt(user, prompt);
-        //    return;
-        //}
+        if (cancellationToken.IsCancellationRequested)
+        {
+            //EnqueueUserPrompt(user, prompt);
+            _logger.LogWarning("Completion cancellation requeted for {User}", user);
+            return;
+        }
 
         //await StreamCompletionForQueuedPrompts(cancellationToken);
 
@@ -42,7 +44,7 @@ public sealed class OllamaClient(
                 {
                     await _aiChatHub.SendBotAnswer(user, stream.Response, isDone: stream.Done);
 
-                    _logger.LogDebug($"{{Response}}{(stream.Done ? "<IsDone>" : "")}", stream.Response);
+                    //_logger.LogDebug($"{{Response}}{(stream.Done ? "<IsDone>" : "")}", stream.Response);
                     answerDebug.Add(stream.Response);
                 },
                 cancellationToken);
@@ -87,6 +89,38 @@ public sealed class OllamaClient(
 
 
         #endregion
+    }
+
+    public override async Task StreamChat(string user, string prompt, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Chat cancellation requeted for {User}", user);
+            return;
+        }
+
+        List<string> answerDebug = [];
+
+        if (!_chatsByUser.TryGetValue(user, out var chat))
+        {
+            // Start a new user Chat
+            chat = _ollamaApi.Chat(async stream =>
+            {
+                await _aiChatHub.SendBotAnswer(user, stream.Message.Content, stream.Done);
+
+                answerDebug.Add(stream.Message.Content);
+            });
+
+
+            if (!_chatsByUser.TryAdd(user, chat))
+            {
+                _logger.LogError("Failed to keep track of chat for {User}", user);
+            }
+        }
+
+        var history = await chat.Send(prompt, cancellationToken);
+
+        _logger.LogInformation(string.Join("", answerDebug));
     }
 
     public override async Task EnsureModelExists(bool mustPullModel, CancellationToken cancellationToken)
@@ -156,17 +190,4 @@ public sealed class OllamaClient(
             }
         }
     }
-
-    //public async IAsyncEnumerable<string> StreamCompletion2(string prompt, [EnumeratorCancellation] CancellationToken cancellationToken)
-    //{
-    //    ConversationContext? context = null;
-    //    GenerateCompletionRequest request = new() { Context = context?.Context, Prompt = prompt };
-    //    IResponseStreamer<GenerateCompletionResponseStream> streamer = new ;
-    //    await foreach (var stream in _ollamaApi.StreamCompletion(request, streamer, cancellationToken))
-    //    {
-    //        logger.LogInformation(stream.Response);
-    //        yield return stream.Response;
-    //    }
-    //}
-
 }
