@@ -10,6 +10,7 @@ public class ChatHubService
     private readonly HubConnection _hubConnection;
     private readonly ILogger _logger;
     private readonly OllamaClient _ollamaClient;
+    private HubConnectionState? _previousConnectionState = null;
 
     public ChatHubService(
         ILogger<ChatHubService> logger,
@@ -49,13 +50,17 @@ public class ChatHubService
             }
             catch (Exception)
             {
-                _logger.LogWarning("Not Connected: {State}", _hubConnection.State);
-                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             }
         }
 
         void LogInitialConnectionState()
         {
+            if (_previousConnectionState == _hubConnection.State)
+                return;
+
+            _previousConnectionState = _hubConnection.State;
+
             if (_hubConnection.State == HubConnectionState.Connected)
             {
                 if (_ollamaClient.ChatCancellationSource.IsCancellationRequested)

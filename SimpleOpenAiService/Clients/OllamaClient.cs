@@ -20,6 +20,7 @@ public sealed class OllamaClient(
     private readonly AiChatHub _aiChatHub = aiChatHub;
     private readonly ConcurrentDictionary<string, ConcurrentQueue<string>> _unansweredPromptsByUser = new();
     private readonly ConcurrentDictionary<string, Chat> _chatsByUser = new();
+    private string? _loadedModel;
 
     public override async Task StreamCompletion(string user, string prompt, CancellationToken cancellationToken)
     {
@@ -127,14 +128,18 @@ public sealed class OllamaClient(
     {
         IEnumerable<Model> localModels = await EnsureOllamaIsRunning(cancellationToken);
 
-        var modelName = ollamaConfig.Value.Model;
+        var configuredModelName = ollamaConfig.Value.Model;
+
+        if (_loadedModel.EqualsIgnoreCase(configuredModelName))
+            return;
 
         if (localModels.Any(m =>
         {
-            return m.Name.StartsWith(modelName);
+            return m.Name.StartsWith(configuredModelName);
         }))
         {
-            _logger.LogInformation("Local Ollama model ready: {ModelName} ", modelName);
+            _logger.LogInformation("Local Ollama model ready: {ModelName} ", configuredModelName);
+            _loadedModel = configuredModelName;
             return;
         }
 
@@ -161,6 +166,7 @@ public sealed class OllamaClient(
                 catch (HttpRequestException e)
                 {
                     _logger.LogError($"Ollama is not running: {e.Message}");
+                    _loadedModel = null;
                     await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
                 }
             } while (!isOllamaRunning);
@@ -170,11 +176,11 @@ public sealed class OllamaClient(
 
         async Task PullModel(CancellationToken cancellationToken)
         {
-            _logger.LogInformation($"Pulling model '{modelName}'...");
+            _logger.LogInformation($"Pulling model '{configuredModelName}'...");
             var sw = Stopwatch.StartNew();
 
             await _ollamaApi.PullModel(
-                modelName,
+                configuredModelName,
                 status => _logger.LogInformation($"({status.Percent}%) {status.Status}"),
                 cancellationToken);
 
@@ -183,9 +189,9 @@ public sealed class OllamaClient(
 
             var localModels = await _ollamaApi.ListLocalModels(cancellationToken);
 
-            if (localModels.Any(m => m.Name.EqualsIgnoreCase(modelName)))
+            if (localModels.Any(m => m.Name.EqualsIgnoreCase(configuredModelName)))
             {
-                _logger.LogDebug($"Ollama model '{modelName}' was successfully pulled locally in '{elasped.TotalMinutes}' minutes");
+                _logger.LogDebug($"Ollama model '{configuredModelName}' was successfully pulled locally in '{elasped.TotalMinutes}' minutes");
                 return;
             }
         }
